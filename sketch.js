@@ -162,9 +162,7 @@ function setup(){
   wallBase = createGraphics(rightW, areaH); wallBase.pixelDensity(1); wallBase.clear();
 
   fitCanvasToHolder();
-    loadSnapshotIfAny().then(() => {
-    subscribeWall();
-  });
+  loadSnapshotIfAny().then(() => subscribeWall());
 }
 
 function windowResized(){
@@ -805,11 +803,13 @@ function loadImageAsync(url) {
 }
 
 async function onRemoteCapture(row) {
+  // 1) bake previous top into wall + update snapshot
   if (topSticker) {
     bakeTopStickerToWall();
-    await uploadWallSnapshot();  
+    await uploadWallSnapshot(); // 确保 snapshot_url 写回 room_state
   }
 
+  // 2) persist current top info to room_state (so new users can see it)
   await sb.from("room_state").upsert([{
     room: ROOM,
     top_image_url: row.payload.imageUrl,
@@ -819,6 +819,7 @@ async function onRemoteCapture(row) {
     snapshot_updated_at: new Date().toISOString()
   }]);
 
+  // 3) create the new topSticker
   currentTopStickerId = row.sticker_id;
   currentTopOwnerId = row.user_id;
 
@@ -892,7 +893,7 @@ async function loadSnapshotIfAny(){
     wallBase.image(img, 0, 0, wallBase.width, wallBase.height);
   }
 
-  // 2) load current top sticker
+  // 2) load current top sticker on top of wall
   if (data.top_image_url && data.top_payload) {
     const img2 = await loadImageAsync(data.top_image_url);
     const g = createGraphics(img2.width, img2.height);
