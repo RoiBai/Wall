@@ -853,7 +853,7 @@ function onRemoteTransform(row) {
 
 async function uploadWallSnapshot() {
   const blob = await new Promise(res => wallBase.elt.toBlob(res, "image/webp", 0.75));
-  const path = `${ROOM}/snapshot.webp`;
+  const path = `${ROOM}/full_wall.webp`;
 
   const { error: upErr } = await sb.storage.from("stickers").upload(path, blob, {
     upsert: true,
