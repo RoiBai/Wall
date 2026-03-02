@@ -732,18 +732,54 @@ function drawStar(pg,x,y,r1,r2,n){
   pg.endShape(CLOSE);
 }
 
-async function uploadStickerGraphic(gfx, stickerId) {
-  const blob = await new Promise(res => gfx.elt.toBlob(res, "image/webp", 0.85));
-  const path = `${ROOM}/${stickerId}.webp`;
+async function loadSnapshotIfAny(){
+  const { data, error } = await sb.from("room_state")
+    .select("snapshot_url, snapshot_updated_at, top_image_url, top_sticker_id, top_user_id, top_payload")
+    .eq("room", ROOM)
+    .maybeSingle();
 
-  const { error: upErr } = await sb.storage.from("stickers").upload(path, blob, {
-    upsert: true,
-    contentType: "image/webp"
-  });
-  if (upErr) throw upErr;
+  if (error) {
+    console.warn("room_state read error:", error);
+    return;
+  }
+  if (!data) return;
 
-  const { data } = sb.storage.from("stickers").getPublicUrl(path);
-  return data.publicUrl;
+  // 1) load baked wall snapshot (cache-bust!)
+  if (data.snapshot_url) {
+    const v = data.snapshot_updated_at ? Date.parse(data.snapshot_updated_at) : Date.now();
+    const snapUrl = `${data.snapshot_url}?v=${v}`;
+    const img = await loadImageAsync(snapUrl);
+
+    wallBase.clear();
+    wallBase.image(img, 0, 0, wallBase.width, wallBase.height);
+  }
+
+  // 2) load current top sticker (also cache-bust)
+  if (data.top_image_url && data.top_payload) {
+    const v2 = data.snapshot_updated_at ? Date.parse(data.snapshot_updated_at) : Date.now();
+    const topUrl = `${data.top_image_url}?v=${v2}`;
+
+    const img2 = await loadImageAsync(topUrl);
+    const g = createGraphics(img2.width, img2.height);
+    g.pixelDensity(1);
+    g.clear();
+    g.image(img2, 0, 0);
+
+    currentTopStickerId = data.top_sticker_id;
+    currentTopOwnerId = data.top_user_id;
+
+    topSticker = {
+      gfx: g,
+      x: data.top_payload.x,
+      y: data.top_payload.y,
+      s: data.top_payload.s,
+      dragging: false,
+      resizing: false,
+      dx: 0,
+      dy: 0,
+      editable: (data.top_user_id === USER_ID)
+    };
+  }
 }
 
 async function sendCaptureEvent(stickerId, imageUrl, x, y, s) {
