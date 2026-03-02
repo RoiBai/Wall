@@ -818,6 +818,7 @@ async function sendTransformEvent(stickerId, x, y, s) {
     user_id: USER_ID,
     payload
   }]);
+  if (error) console.warn("transform insert error:", error);
 }
 
 function subscribeWall() {
@@ -934,4 +935,19 @@ async function refreshWallBaseFromServer() {
   const img = await loadImageAsync(snapUrl);
   wallBase.clear();
   wallBase.image(img, 0, 0, wallBase.width, wallBase.height);
+}
+
+async function uploadStickerGraphic(gfx, stickerId) {
+  // gfx is p5.Graphics
+  const blob = await new Promise(res => gfx.elt.toBlob(res, "image/webp", 0.85));
+  const path = `${ROOM}/${stickerId}.webp`;
+
+  const { error: upErr } = await sb.storage.from("stickers").upload(path, blob, {
+    upsert: true,
+    contentType: "image/webp"
+  });
+  if (upErr) throw upErr;
+
+  const { data } = sb.storage.from("stickers").getPublicUrl(path);
+  return data.publicUrl;
 }
