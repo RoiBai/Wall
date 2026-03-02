@@ -807,8 +807,17 @@ function loadImageAsync(url) {
 async function onRemoteCapture(row) {
   if (topSticker) {
     bakeTopStickerToWall();
-    uploadWallSnapshot().catch(console.error);
+    await uploadWallSnapshot();  
   }
+
+  await sb.from("room_state").upsert([{
+    room: ROOM,
+    top_image_url: row.payload.imageUrl,
+    top_sticker_id: row.sticker_id,
+    top_user_id: row.user_id,
+    top_payload: { x: row.payload.x, y: row.payload.y, s: row.payload.s },
+    snapshot_updated_at: new Date().toISOString()
+  }]);
 
   currentTopStickerId = row.sticker_id;
   currentTopOwnerId = row.user_id;
@@ -866,18 +875,44 @@ async function uploadWallSnapshot() {
 
 async function loadSnapshotIfAny(){
   const { data, error } = await sb.from("room_state")
-    .select("snapshot_url")
+    .select("snapshot_url, top_image_url, top_sticker_id, top_user_id, top_payload")
     .eq("room", ROOM)
     .maybeSingle();
 
   if (error) {
-    console.warn("no room_state yet:", error);
+    console.warn("room_state read error:", error);
     return;
   }
-  if (!data || !data.snapshot_url) return;
+  if (!data) return;
 
-  const img = await loadImageAsync(data.snapshot_url);
+  // 1) load baked wall snapshot
+  if (data.snapshot_url) {
+    const img = await loadImageAsync(data.snapshot_url);
+    wallBase.clear();
+    wallBase.image(img, 0, 0, wallBase.width, wallBase.height);
+  }
 
-  wallBase.clear();
-  wallBase.image(img, 0, 0, wallBase.width, wallBase.height);
+  // 2) load current top sticker
+  if (data.top_image_url && data.top_payload) {
+    const img2 = await loadImageAsync(data.top_image_url);
+    const g = createGraphics(img2.width, img2.height);
+    g.pixelDensity(1);
+    g.clear();
+    g.image(img2, 0, 0);
+
+    currentTopStickerId = data.top_sticker_id;
+    currentTopOwnerId = data.top_user_id;
+
+    topSticker = {
+      gfx: g,
+      x: data.top_payload.x,
+      y: data.top_payload.y,
+      s: data.top_payload.s,
+      dragging: false,
+      resizing: false,
+      dx: 0,
+      dy: 0,
+      editable: (data.top_user_id === USER_ID)
+    };
+  }
 }
