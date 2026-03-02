@@ -482,11 +482,17 @@ function captureAndMergeToWall(){
       const initY = areaH/2;
       const initS = 1.0;
 
+      console.log("STEP1 uploading sticker...");
       const url = await uploadStickerGraphic(sticker, stickerId);
-      await sendCaptureEvent(stickerId, url, initX, initY, initS);
+      console.log("STEP1 ok url=", url);
+
+      console.log("STEP2 inserting wall_events...");
+      const inserted = await sendCaptureEvent(stickerId, url, initX, initY, initS);
+      console.log("STEP2 ok inserted=", inserted);
+
     } catch(e){
-      console.error("publish failed:", e);
-      alert("Upload/publish failed. Check Supabase keys + bucket public + RLS.");
+      console.error("publish failed FULL:", e);
+      alert("Publish failed: " + (e?.message || JSON.stringify(e)));
     }
   })();
 }
